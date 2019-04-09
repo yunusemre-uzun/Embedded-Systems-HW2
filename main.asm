@@ -171,9 +171,10 @@ score2
 	
 ScoreFlags  udata 0x57
 ScoreFlags
+  
+LedFlags udata 0x58
+LedFlags
 
-  
-  
 
 org     0x00
 goto    init
@@ -274,6 +275,9 @@ init:
     movwf kartal
     movf kartal , 0
     movff kartal , LATA    ; ALSO PORTA
+    
+    movlw b'00000001'
+    movwf LedFlags
 
     
     ;Enable interrupts
@@ -301,22 +305,24 @@ main:
     goto main
     
 ShowLeds:
-    BCF LATH , 3
-    BCF LATH , 2
+    BTFSS LedFlags,3
+    goto tens
     BCF LATH , 1
     movff INDF0, LATJ
-    BSF LATH,  0
-    NOP
-    BCF LATH,  0
-    movff INDF1, LATJ
-    BSF LATH,  1
-    NOP
-    BCF LATH,  1
-    movff INDF2, LATJ
-    BSF LATH,  2
-    NOP
-    BCF LATH,  2
+    BSF LATH,  3
     return
+    tens:
+	BCF LATH,  3
+	BTFSS LedFlags,2
+	goto hundreds
+	movff INDF1, LATJ
+	BSF LATH,  2
+	return
+    hundreds:
+	BCF LATH,  2
+	movff INDF2, LATJ
+	BSF LATH,  1
+	return
     
 EndGame:
     movf kartal , 0
@@ -783,6 +789,14 @@ UpdateScore:
 isr:
     BCF INTCON,2   ;timer0 interrupt is received, make 0 overflow bit
     incf counter,1 ;increment timer counter
+    rrncf LedFlags
+    btfsc LedFlags,0
+    goto resetLedFlags
+    goto cont_isr
+    resetLedFlags:
+	movlw b'00001000'
+	movwf LedFlags
+    cont_isr:
     movlw b'00000001' ;set wreg to 1
     cpfseq state
     goto state_2_isr
