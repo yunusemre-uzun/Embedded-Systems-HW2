@@ -130,7 +130,50 @@ asteroid_count
 Tflags	udata 0x49 ; 0 is used for timer flag
 Tflags
 
-   
+score0	udata 0x4A
+score0
+
+led0 udata 0x4B	
+led0
+ 
+led1 udata 0x4C
+led1
+
+led2 udata 0x4D	
+led2
+ 
+led3 udata 0x4E
+led3
+
+led4 udata 0x4F
+led4
+ 
+led5 udata 0x50
+led5
+
+led6 udata 0x51	
+led6
+ 
+led7 udata 0x52	
+led7
+ 
+led8 udata 0x53	
+led8
+ 
+led9 udata 0x54	
+led9
+
+score1	udata 0x55
+score1
+	
+score2	udata 0x56
+score2
+	
+ScoreFlags  udata 0x57
+ScoreFlags
+
+  
+  
 
 org     0x00
 goto    init
@@ -168,12 +211,47 @@ init:
     BSF ADCON1 , 2
     BSF ADCON1 , 3
     
+    
+    movlw b'00111111'
+    movwf led0
+    movlw b'00000110'
+    movwf led1
+    movlw b'01011011'
+    movwf led2
+    movlw b'01001111'
+    movwf led3
+    movlw b'01100110'
+    movwf led4
+    movlw b'01101101'
+    movwf led5
+    movlw b'01111101'
+    movwf led6
+    movlw b'00000111'
+    movwf led7
+    movlw b'01111111'
+    movwf led8
+    movlw b'01101111'
+    movwf led9
+    
+    movlw h'4B'
+    LFSR 0 , h'4B'
+    LFSR 1 , h'4B'
+    LFSR 2 , h'4C'
+    BCF LATH , 2
+    BCF LATH , 1
+    BCF LATH , 0
+    
+    BSF LATH , 3
+    movlw b'00111111'
+    movwf LATJ
+    
+  
     ;Clear the state number
     clrf state
     
     ;Configure Input/Interrupt Ports
     movlw   b'00001111' 
-    movwf   TRISG   
+    movwf   TRISG
     clrf    PORTG
 
     ;Initialize Timer0
@@ -199,16 +277,15 @@ init:
 
     
     ;Enable interrupts
-    movlw   b'10100000' ;Enable Global, peripheral, Timer0 and RB interrupts by setting GIE, PEIE, TMR0IE and RBIE bits to 1
+    movlw   b'10100000' 
+		; Enable Global, peripheral, Timer0 and RB interrupts
+			;set GIE, PEIE, TMR0IE and RBIE bits to 1
     movwf   INTCON
     
     ;Enable timer0, timer1
     bsf     T0CON, 7    ;Enable Timer0 by setting TMR0ON to 1
     bsf     T1CON, 0    ;Enable Timer0 by setting TMR0ON to 1
-    
-    
-    
-    
+        
     
 main:
     call state_check
@@ -219,7 +296,37 @@ main:
     call kartal_move
     BTFSC Tflags , 0
     call GameEngine
+    call EndGame
+    call ShowLeds
     goto main
+    
+ShowLeds:
+    BCF LATH , 3
+    BCF LATH , 2
+    BCF LATH , 1
+    movff INDF0, LATJ
+    BSF LATH,  0
+    NOP
+    BCF LATH,  0
+    movff INDF1, LATJ
+    BSF LATH,  1
+    NOP
+    BCF LATH,  1
+    movff INDF2, LATJ
+    BSF LATH,  2
+    NOP
+    BCF LATH,  2
+    return
+    
+EndGame:
+    movf kartal , 0
+    andwf A_asteroid_new , 0
+    movwf temp_logic
+    clrf WREG
+    CPFSEQ temp_logic
+    clrf state
+    return
+    
     
 state_check:
     clrf WREG
@@ -229,6 +336,19 @@ state_check:
 	bcf T0CON,7 ;disable timer 0
 	clrf TMR0L  ;clear timer0 buffer
 	; Clear all buffers
+	movlw   b'11001101' ; 16-bit w/o pre-scalar for T1 conf
+	movwf   T1CON
+	
+	movlw b'00001000'       ; INITILIZING THE SPACESHIP
+	movwf kartal
+	movff kartal , LATA    ; ALSO PORTA
+	clrf LATB
+	clrf LATC
+	clrf LATD
+	clrf LATE
+	clrf LATF
+
+
 	clrf A_lazer_new
 	clrf A_asteroid_new
 	clrf A_lazer_old
@@ -266,8 +386,11 @@ state_check:
 	clrf beamBuffer
 	clrf temp_high
 	clrf F0_buffer
+	clrf score0
+	clrf score1
+	clrf score2
+	clrf ScoreFlags
 	;Cleaned all buffers
-	call set_initial_leds
 	wait_for_RG0:
 	    BTFSS PORTG , 0
 	    goto wait_for_RG0
@@ -275,6 +398,9 @@ state_check:
 	    BTFSC PORTG , 0
 	    goto wait_for_RG0_release
 	incf state
+	movff TMR1L, vites_low
+	movff TMR1H, vites_high
+	clrf T1CON
 	movlw b'00001000'
 	movwf kartal
 	movlw   b'00111111' ; load 55 to T0 , to make 5 ms
@@ -307,18 +433,7 @@ state_check:
 	state4:
 	    return
 	    
-	
-	
-set_initial_leds:
-    movlw b'00011111'
-    movwf LATA
-    movwf LATB
-    movwf LATC
-    movwf LATD
-    movwf LATE
-    movwf LATF
-    return
-    
+
 fire_task:
     BTFSC Gflags , 0
     BTFSC PORTG , 1
@@ -397,11 +512,6 @@ kartal_update:
 
 create_asteroids:
     incf asteroid_count	    ;increment asteroid count
-    btfsc Gflags, 6	    
-    goto label		    ;if this is not the first asteroid
-    movff TMR1L, vites_low
-    movff TMR1H, vites_high
-    bsf Gflags, 6
     label:
 	movlw b'00001010'
 	CPFSEQ shift_count
@@ -435,115 +545,135 @@ create_asteroids:
 		    RRCF temp_high , 1
 		    movff temp_high , vites_high
 		    incf shift_count , 1
-		
 		    return
 
 		    
 GameEngine:
     bcf Tflags , 0
     clrf counter
+    call create_asteroids
+    movff F0_buffer , F_asteroid_new
+    
     ;Calculations for A buffers
     movff beamBuffer , A_lazer_new 
     movff beamBuffer , A_lazer_old 
-    call create_asteroids
-    movff F0_buffer , F_asteroid_new
     movf A_lazer_new , 0
+    iorwf B_lazer_old , 0	    ; DELETE IF WRONG BUT PROBABLY IT'S CORRECT
     comf WREG 
     andwf B_asteroid_old , 0
     movwf A_asteroid_new
     
-    ;Calculations for B buffers
+  ;Dalculations for B buffers
     movf B_asteroid_old , 0
-    iorwf C_asteroid_old , 0
-    comf WREG 
-    iorwf B_lazer_old , 0
+    comf WREG
     andwf A_lazer_old , 0
-    movwf B_lazer_new 
-    movf A_lazer_old , 0
-    iorwf B_lazer_old , 0
+    movwf B_lazer_new
+    
+    movf B_lazer_old , 0
+    comf WREG
+    movwf temp_logic
+    movf C_lazer_old , 0
     comf WREG 
-    movwf temp_logic 
-    movf A_lazer_old , 0
-    andwf B_asteroid_old , 0
-    iorwf temp_logic , 0
+    andwf temp_logic , 0
     andwf C_asteroid_old , 0
     movwf B_asteroid_new 
     
     
   ;Dalculations for C buffers
     movf C_asteroid_old , 0
-    iorwf D_asteroid_old , 0
+    comf WREG
+    movwf temp_logic
+    movf B_asteroid_old , 0
     comf WREG 
-    iorwf C_lazer_old , 0
+    andwf temp_logic , 0
     andwf B_lazer_old , 0
     movwf C_lazer_new
     
-    movf B_lazer_old , 0
-    iorwf C_lazer_old , 0
+    movf C_lazer_old , 0
     comf WREG
-    movwf temp_logic 
-    movf B_lazer_old , 0
-    andwf C_asteroid_old , 0
-    iorwf temp_logic , 0
+    movwf temp_logic
+    movf D_lazer_old  , 0
+    comf WREG 
+    andwf temp_logic , 0
     andwf D_asteroid_old , 0
     movwf C_asteroid_new
     
-    
+   
   ;Dalculations for D buffers
     movf D_asteroid_old , 0
-    iorwf E_asteroid_old , 0
-    comf WREG 
-    iorwf D_lazer_old , 0
-    andwf C_lazer_old , 0
-    movwf D_lazer_new 
-    
-    movf C_lazer_old , 0
-    iorwf D_lazer_old , 0
     comf WREG
-    movwf temp_logic 
-    movf C_lazer_old , 0
-    andwf D_asteroid_old , 0
-    iorwf temp_logic , 0
+    movwf temp_logic
+    movf C_asteroid_old   , 0
+    comf WREG 
+    andwf temp_logic , 0
+    andwf C_lazer_old , 0
+    movwf D_lazer_new
+    
+    movf D_lazer_old , 0
+    comf WREG
+    movwf temp_logic
+    movf E_lazer_old , 0
+    comf WREG 
+    andwf temp_logic , 0
     andwf E_asteroid_old , 0
-    movwf D_asteroid_new 
+    movwf D_asteroid_new   
     
     
   ;Dalculations for E buffers
     movf E_asteroid_old , 0
-    iorwf F_asteroid_old , 0
-    comf WREG 
-    iorwf E_lazer_old , 0
-    andwf D_lazer_old , 0
-    movwf E_lazer_new 
-    
-    movf D_lazer_old , 0
-    iorwf E_lazer_old , 0
     comf WREG
-    movwf temp_logic 
-    movf D_lazer_old , 0
-    andwf E_asteroid_old , 0
-    iorwf temp_logic , 0
+    movwf temp_logic
+    movf D_asteroid_old , 0
+    comf WREG 
+    andwf temp_logic , 0
+    andwf D_lazer_old , 0
+    movwf E_lazer_new
+    
+    movf E_lazer_old , 0
+    comf WREG
+    movwf temp_logic
+    movf F_lazer_old , 0
+    comf WREG 
+    andwf temp_logic , 0
     andwf F_asteroid_old , 0
-    movwf E_asteroid_new 
+    movwf E_asteroid_new
+
     
     
   ;Dalculations for F buffers
     movf F_asteroid_old , 0
-    iorwf F0_buffer , 0
     comf WREG 
-    iorwf F_lazer_old , 0
-    andwf E_lazer_old , 0
-    movwf F_lazer_new 
-    
-    movf E_lazer_old , 0
-    iorwf F_lazer_old , 0
+    movwf temp_logic
+    movf E_asteroid_old , 0
     comf WREG
-    movwf temp_logic 
-    movf E_lazer_old , 0
-    andwf F_asteroid_old , 0
-    iorwf temp_logic , 0
+    andwf temp_logic , 0
+    andwf E_lazer_old , 0
+    movwf F_lazer_new
+    
+    movf F_lazer_old , 0
+    comf WREG
     andwf F0_buffer , 0
     movwf F_asteroid_new
+
+    movf A_asteroid_new , 0
+    CPFSEQ B_asteroid_old
+    call UpdateScore
+    movf B_asteroid_new , 0
+    CPFSEQ C_asteroid_old
+    call UpdateScore
+    movf C_asteroid_new , 0
+    CPFSEQ D_asteroid_old
+    call UpdateScore
+    movf D_asteroid_new , 0
+    CPFSEQ E_asteroid_old
+    call UpdateScore
+    movf E_asteroid_new , 0
+    CPFSEQ F_asteroid_old
+    call UpdateScore
+    movf F_asteroid_new , 0
+    CPFSEQ F0_buffer
+    call UpdateScore
+    
     
     movff A_asteroid_new , A_asteroid_old
     movff B_asteroid_new , B_asteroid_old
@@ -551,6 +681,7 @@ GameEngine:
     movff D_asteroid_new , D_asteroid_old
     movff E_asteroid_new , E_asteroid_old
     movff F_asteroid_new , F_asteroid_old
+    
     
     movff A_lazer_new , A_lazer_old
     movff B_lazer_new , B_lazer_old
@@ -586,14 +717,75 @@ GameEngine:
     clrf beamBuffer 
     return
     
-
+UpdateScore:
+    incf score0 , 1
+    movlw h'0A'
+    CPFSLT score0 
+    goto anand
+    BCF LATH , 2
+    BCF LATH , 1
+    movff POSTINC0 , LATJ
+    BTFSC ScoreFlags , 0
+    BSF LATH , 2
+    BTFSC ScoreFlags , 1
+    BSF LATH , 1
+    return
+    
+    anand:
+	BSF ScoreFlags , 0
+        clrf score0 
+	LFSR 0 , h'4B'
+	incf score1 , 1
+	BCF LATH , 2
+	BCF LATH , 1
+	movff INDF0 , LATJ
+	BSF LATH , 2
+	BTFSC ScoreFlags , 1
+	BSF LATH , 1
+	movlw h'0A'
+	CPFSLT score1
+	goto carlsen
+	
+	BCF LATH , 3
+	BCF LATH , 1
+	movff POSTINC1 , LATJ
+	BSF LATH , 3
+	BTFSC ScoreFlags , 1
+	BSF LATH , 1
+	return
+	    
+	    carlsen:
+		BSF ScoreFlags , 1
+		BSF LATH , 1
+		clrf score1 
+		LFSR 1 , h'4B'
+		incf score2 , 1
+		movlw h'0A'
+		CPFSLT score2
+		LFSR 1 , h'4B'
+		BCF LATH , 1
+		BCF , LATH , 3
+		movff INDF1 , LATJ
+		BSF LATH , 1
+		BSF LATH , 3
+		
+		goto kramnik
+		BCF , LATH , 2
+		BCF , LATH , 3
+		movff POSTINC2 , LATJ
+		BSF LATH , 2
+		BSF LATH , 3
+		
+		kramnik:
+		    return
+    
+    
 isr:
     BCF INTCON,2   ;timer0 interrupt is received, make 0 overflow bit
     incf counter,1 ;increment timer counter
     movlw b'00000001' ;set wreg to 1
     cpfseq state
     goto state_2_isr
-    goto state_1_isr
     state_1_isr:
 	movlw   b'00111111' ; load 55 to T0 to count 156, to make 5 ms
 	movwf   TMR0L
