@@ -238,17 +238,20 @@ init:
     LFSR 0 , h'4B'
     LFSR 1 , h'4B'
     LFSR 2 , h'4C'
-    BCF LATH , 2
-    BCF LATH , 1
-    BCF LATH , 0
-    
+    BSF LATH , 2
+    BSF LATH , 1
     BSF LATH , 3
+    LFSR 0 , h'4B'
+    LFSR 1 , h'4B'
+    LFSR 2 , h'4B'
+
     movlw b'00111111'
     movwf LATJ
     
   
     ;Clear the state number
     clrf state
+    clrf ScoreFlags
     
     ;Configure Input/Interrupt Ports
     movlw   b'00001111' 
@@ -313,6 +316,8 @@ ShowLeds:
     return
     tens:
 	BCF LATH,  3
+	BTFSS ScoreFlags , 0
+	return
 	BTFSS LedFlags,2
 	goto hundreds
 	movff INDF1, LATJ
@@ -320,6 +325,8 @@ ShowLeds:
 	return
     hundreds:
 	BCF LATH,  2
+    	BTFSS ScoreFlags , 1
+	return
 	movff INDF2, LATJ
 	BSF LATH,  1
 	return
@@ -396,13 +403,18 @@ state_check:
 	clrf score1
 	clrf score2
 	clrf ScoreFlags
+	LFSR 0 , h'4B'
+	LFSR 1 , h'4B'
+	LFSR 2 , h'4B'
+	BCF LATH , 1
+	BCF LATH , 2
+	BSF LATH , 3
+	movff INDF0 , LATJ
+	
 	;Cleaned all buffers
 	wait_for_RG0:
 	    BTFSS PORTG , 0
 	    goto wait_for_RG0
-	wait_for_RG0_release:
-	    BTFSC PORTG , 0
-	    goto wait_for_RG0_release
 	incf state
 	movff TMR1L, vites_low
 	movff TMR1H, vites_high
@@ -728,13 +740,7 @@ UpdateScore:
     movlw h'0A'
     CPFSLT score0 
     goto anand
-    BCF LATH , 2
-    BCF LATH , 1
-    movff POSTINC0 , LATJ
-    BTFSC ScoreFlags , 0
-    BSF LATH , 2
-    BTFSC ScoreFlags , 1
-    BSF LATH , 1
+    movff POSTINC0 , WREG
     return
     
     anand:
@@ -742,48 +748,20 @@ UpdateScore:
         clrf score0 
 	LFSR 0 , h'4B'
 	incf score1 , 1
-	BCF LATH , 2
-	BCF LATH , 1
-	movff INDF0 , LATJ
-	BSF LATH , 2
-	BTFSC ScoreFlags , 1
-	BSF LATH , 1
 	movlw h'0A'
 	CPFSLT score1
 	goto carlsen
-	
-	BCF LATH , 3
-	BCF LATH , 1
-	movff POSTINC1 , LATJ
-	BSF LATH , 3
-	BTFSC ScoreFlags , 1
-	BSF LATH , 1
+	movff POSTINC1 , WREG
 	return
 	    
 	    carlsen:
 		BSF ScoreFlags , 1
-		BSF LATH , 1
 		clrf score1 
 		LFSR 1 , h'4B'
 		incf score2 , 1
 		movlw h'0A'
-		CPFSLT score2
-		LFSR 1 , h'4B'
-		BCF LATH , 1
-		BCF , LATH , 3
-		movff INDF1 , LATJ
-		BSF LATH , 1
-		BSF LATH , 3
-		
-		goto kramnik
-		BCF , LATH , 2
-		BCF , LATH , 3
-		movff POSTINC2 , LATJ
-		BSF LATH , 2
-		BSF LATH , 3
-		
-		kramnik:
-		    return
+		movff POSTINC2 , WREG
+		return
     
     
 isr:
